@@ -15,7 +15,7 @@
    sort_on python:(sort_on and sort_on[1]) or (not request.nodeid and 'activity') or '';
    group_on python:request.group and request.group[0] or nothing;
    group_desc python:group_on and group_on[0] == '-';
-   group_on python:(group_on and group_on[1]) or (not request.nodeid and 'priority') or '';
+   group_on python:(group_on and group_on[1]) or (not request.nodeid and 'rank') or '';
 
    search_input templates/page/macros/search_input;
    search_date templates/page/macros/search_date;
@@ -43,7 +43,8 @@
   <td>&nbsp;</td>
 </tr>
 
-<tr tal:define="name string:title">
+<tr tal:condition="context/title/is_view_ok"
+    tal:define="name string:title">
   <th i18n:translate="">Title:</th>
   <td metal:use-macro="search_input"></td>
   <td metal:use-macro="column_input"></td>
@@ -51,10 +52,25 @@
   <td>&nbsp;</td>
 </tr>
 
-<tr tal:define="name string:keyword;
+<tr tal:condition="context/categories/is_view_ok"
+    tal:define="name string:categories;
+                db_klass string:category;
+                db_content string:name;">
+  <th i18n:translate="">Categories:</th>
+  <td metal:use-macro="search_select">
+    <option metal:fill-slot="extra_options" value="-1" i18n:translate=""
+            tal:attributes="selected python:value == '-1'">not selected</option>
+  </td>
+  <td metal:use-macro="column_input"></td>
+  <td metal:use-macro="sort_input"></td>
+  <td metal:use-macro="group_input"></td>
+</tr>
+
+<tr tal:condition="context/keywords/is_view_ok"
+    tal:define="name string:keywords;
                 db_klass string:keyword;
                 db_content string:name;">
-  <th i18n:translate="">Keyword:</th>
+  <th i18n:translate="">Keywords:</th>
   <td metal:use-macro="search_select_keywords">
     <option metal:fill-slot="extra_options" value="-1" i18n:translate=""
             tal:attributes="selected python:value == '-1'">not selected</option>
@@ -72,7 +88,8 @@
   <td>&nbsp;</td>
 </tr>
 
-<tr tal:define="name string:creation">
+<tr tal:condition="context/creation/is_view_ok"
+    tal:define="name string:creation">
   <th i18n:translate="">Creation Date:</th>
   <td metal:use-macro="search_date"></td>
   <td metal:use-macro="column_input"></td>
@@ -80,15 +97,16 @@
   <td metal:use-macro="group_input"></td>
 </tr>
 
-<tr tal:define="name string:creator;
+<tr tal:condition="context/creator/is_view_ok"
+    tal:define="name string:creator;
                 db_klass string:user;
-                db_content string:username;"
-    tal:condition="db/user/is_view_ok">
+                db_content string:username;">
   <th i18n:translate="">Creator:</th>
   <td metal:use-macro="search_select">
-    <option metal:fill-slot="extra_options" value="@current_user"
-	    tal:attributes="selected python:value == '@current_user'"
-            i18n:translate="">created by me</option>
+    <option metal:fill-slot="extra_options" i18n:translate=""
+            value="@current_user"
+            tal:attributes="selected python:value == '@current_user'"
+            >created by me</option>
   </td>
   <td metal:use-macro="column_input"></td>
   <td metal:use-macro="sort_input"></td>
@@ -103,25 +121,27 @@
   <td>&nbsp;</td>
 </tr>
 
-<tr tal:define="name string:actor;
+<tr tal:condition="context/actor/is_view_ok"
+    tal:define="name string:actor;
                 db_klass string:user;
-                db_content string:username;"
-    tal:condition="db/user/is_view_ok">
+                db_content string:username;">
   <th i18n:translate="">Actor:</th>
   <td metal:use-macro="search_select">
-    <option metal:fill-slot="extra_options" value="@current_user"
-	    tal:attributes="selected python:value == '@current_user'"
-            i18n:translate="">done by me</option>
+    <option metal:fill-slot="extra_options" i18n:translate=""
+            value="@current_user"
+            tal:attributes="selected python:value == '@current_user'"
+            >done by me</option>
   </td>
   <td metal:use-macro="column_input"></td>
   <td metal:use-macro="sort_input"></td>
   <td>&nbsp;</td>
 </tr>
 
-<tr tal:define="name string:priority;
-                db_klass string:priority;
+<tr tal:condition="context/rank/is_view_ok"
+    tal:define="name string:rank;
+                db_klass string:rank;
                 db_content string:name;">
-  <th i18n:translate="">Priority:</th>
+  <th i18n:translate="">Rank:</th>
   <td metal:use-macro="search_select_translated">
     <option metal:fill-slot="extra_options" value="-1" i18n:translate=""
             tal:attributes="selected python:value == '-1'">not selected</option>
@@ -131,14 +151,31 @@
   <td metal:use-macro="group_input"></td>
 </tr>
 
-<tr tal:define="name string:status;
+<tr tal:condition="context/importance/is_view_ok"
+    tal:define="name string:importance;
+                db_klass string:importance;
+                db_content string:name;">
+  <th>Importance:</th>
+  <td metal:use-macro="search_select">
+    <option metal:fill-slot="extra_options" value="-1" i18n:translate=""
+            tal:attributes="selected python:value == '-1'">not selected</option>
+  </td>
+  <td metal:use-macro="column_input"></td>
+  <td metal:use-macro="sort_input"></td>
+  <td metal:use-macro="group_input"></td>
+</tr>
+
+<tr tal:condition="context/status/is_view_ok"
+    tal:define="name string:status;
                 db_klass string:status;
                 db_content string:name;">
   <th i18n:translate="">Status:</th>
   <td metal:use-macro="search_select_translated">
     <tal:block metal:fill-slot="extra_options">
-      <option value="-1,1,2,3,4,5,6,7" i18n:translate=""
-              tal:attributes="selected python:value == '-1,1,2,3,4,5,6,7'">not resolved</option>
+      <option value="-1,1,2,3,4,5" i18n:translate=""
+              tal:attributes="selected python:value == '1,2,3,4,5'">not closed/deferred/watching</option>
+      <option value="-1,1,2,3,4,5,7,9" i18n:translate=""
+              tal:attributes="selected python:value == '1,2,3,4,5,7'">not closed</option>
       <option value="-1" i18n:translate=""
               tal:attributes="selected python:value == '-1'">not selected</option>
     </tal:block>
@@ -148,10 +185,38 @@
   <td metal:use-macro="group_input"></td>
 </tr>
 
-<tr tal:define="name string:assignedto;
+<tr tal:condition="context/resolved/is_view_ok"
+    tal:define="name string:resolution;
+                db_klass string:resolution;
+                db_content string:name;">
+  <th i18n:translate="">Resolution:</th>
+  <td metal:use-macro="search_select">
+    <option metal:fill-slot="extra_options" value="-1" i18n:translate=""
+            tal:attributes="selected python:value == '-1'">not selected</option>
+  </td>
+  <td metal:use-macro="column_input"></td>
+  <td metal:use-macro="sort_input"></td>
+  <td metal:use-macro="group_input"></td>
+</tr>
+
+<tr tal:condition="context/site/is_view_ok"
+    tal:define="name string:site;
+                db_klass string:site;
+                db_content string:name;">
+  <th i18n:translate="">Site:</th>
+  <td metal:use-macro="search_select">
+    <option metal:fill-slot="extra_options" value="-1" i18n:translate=""
+            tal:attributes="selected python:value == '-1'">not selected</option>
+  </td>
+  <td metal:use-macro="column_input"></td>
+  <td metal:use-macro="sort_input"></td>
+  <td metal:use-macro="group_input"></td>
+</tr>
+
+<tr tal:condition="context/assignedto/is_view_ok"
+    tal:define="name string:assignedto;
                 db_klass string:user;
-                db_content string:username;"
-    tal:condition="db/user/is_view_ok">
+                db_content string:username;">
   <th i18n:translate="">Assigned to:</th>
   <td metal:use-macro="search_select">
     <tal:block metal:fill-slot="extra_options">
@@ -171,8 +236,10 @@
  <th i18n:translate="">No Sort or group:</th>
  <td>&nbsp;</td>
  <td>&nbsp;</td>
- <td><input type="radio" name="@sort" value="" tal:attributes="checked python:sort_on == ''"></td>
- <td><input type="radio" name="@group" value="" tal:attributes="checked python:group_on == ''"></td>
+ <td><input type="radio" name="@sort" value=""
+             tal:attributes="checked python:sort_on == ''"></td>
+ <td><input type="radio" name="@group" value=""
+             tal:attributes="checked python:group_on == ''"></td>
 </tr>
 
 <tr>
@@ -214,6 +281,10 @@
   <td>
    &nbsp;
    <input type="hidden" name="@action" value="search">
+   <input type="hidden" name="categories"
+     tal:condition="not:python:request.user.hasPermission('View',
+      'categories')"
+      tal:attributes="value python:utils.getCategory(request)">
   </td>
   <td><input type="submit" value="Search" i18n:attributes="value"></td>
 </tr>

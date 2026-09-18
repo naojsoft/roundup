@@ -19,25 +19,47 @@
 	     kw_edit python:request.user.hasPermission('Edit', 'keyword');
 	     kw_create python:request.user.hasPermission('Create', 'keyword');
 	     kw_edit_link python:kw_edit and db.keyword.list();
-	     columns string:id,activity,title,creator,status;
-	     columns_showall string:id,activity,title,creator,assignedto,status;
-	     status_notresolved string:-1,1,2,3,4,5,6,7;
+	     columns string:id,activity,creator,title,assignedto,status;
+	     columns_showall string:id,activity,creator,title,assignedto,status;
+	     status_notresolved string:-1,1,2,3,4,5;
+	     status_all string:-1,1,2,3,4,5,6,7,9;
+	     status_watching string:9;
+	     cat python:utils.getCategory(request);
 	     ">
     <header>
 	<div class="header-left">
 	    <div id="header-logo">
+		<img src="@@file/ssdlogo.png" alt="Subaru Software Division">
 	    </div>
 	    <div id="body-title">
+		<p id="tracker-name">Subaru Software Division<br>
+		    <span>ISSUE TRACKER</span></p>
 		<h2><span metal:define-slot="body_title">body title</span></h2>
 	    </div>
 	</div>
+	<form id="categorychange" method="POST" action="issue"
+	      tal:condition="python:request.user.username != 'anonymous'">
+	    <label for="category-select" i18n:translate="">Category</label>
+	    <select id="category-select" name="__category"
+		    onchange="this.form.submit()">
+		<option tal:repeat="s python:utils.getUserCategories(request)"
+			tal:attributes="value python:s.name;
+					selected python:cat == s.id"
+			tal:content="python:s.name">category</option>
+	    </select>
+	    <input type="hidden" name="@action" value="selectcategory">
+	    <input name="@csrf" type="hidden"
+		   tal:attributes="value python:utils.anti_csrf_nonce()">
+	    <noscript><input type="submit" value="Change"
+			     i18n:attributes="value"></noscript>
+	</form>
 	<search id="searchbox">
 	    <form method="GET" action="issue">
 		<input type="hidden" name="@columns"
 		       tal:attributes="value columns_showall"
 		       value="id,activity,title,creator,assignedto,status"/>
 		<input type="hidden" name="@sort" value="activity"/>
-		<input type="hidden" name="@group" value="priority"/>
+		<input type="hidden" name="@group" value="status"/>
 		<input id="search-text" name="@search_text" size="10"
 		       tal:attributes="value request/search_text | default" />
 		<input type="submit" id="submit" name="submit" value="Search"
@@ -68,26 +90,41 @@
 		    <a href="#"
 		       tal:attributes="href python:request.indexargs_url('issue', {
 			     '@sort': '-activity',
-			     '@group': 'priority',
-			     '@filter': 'status,assignedto',
+			     '@group': 'status',
+			     '@filter': 'categories,status',
 			     '@columns': columns,
 			     '@search_text': '',
 			     'status': status_notresolved,
 			     'assignedto': '-1',
-			     '@dispname': i18n.gettext('Show Unassigned'),
+			     'categories': cat,
+			     '@dispname': i18n.gettext('Show Current'),
 			     })"
-		       i18n:translate="">Show Unassigned</a><br>
+		       i18n:translate="">Show Current</a><br>
 		    <a href="#"
 		       tal:attributes="href python:request.indexargs_url('issue', {
 			     '@sort': '-activity',
-			     '@group': 'priority',
-			     '@filter': 'status',
-			     '@columns': columns_showall,
+			     '@group': 'rank',
+			     '@filter': 'categories,status',
+			     '@columns': columns,
 			     '@search_text': '',
-			     'status': status_notresolved,
+			     'status': status_all,
+			     'categories': cat,
 			     '@dispname': i18n.gettext('Show All'),
 			     })"
 		       i18n:translate="">Show All</a><br>
+		    <a href="#"
+		       tal:attributes="href python:request.indexargs_url('issue', {
+			     '@sort': '-activity',
+			     '@group': 'status',
+			     '@filter': 'categories,status',
+			     '@columns': columns,
+			     '@search_text': '',
+			     'status': status_watching,
+			     'assignedto': '-1',
+			     'categories': cat,
+			     '@dispname': i18n.gettext('Show Watching'),
+			     })"
+		       i18n:translate="">Show Watching</a><br>
 		    <a href="issue?@template=search" i18n:translate="">Search</a><br>
 		    <input type="submit" class="form-small" value="Show issue:"
 			   i18n:attributes="value"><input class="form-small" size="4"
@@ -157,12 +194,13 @@
 		<a href="#"
 		   tal:attributes="href python:request.indexargs_url('issue', {
 			 '@sort': '-activity',
-			 '@group': 'priority',
-			 '@filter': 'status,assignedto',
-			 '@columns': 'id,activity,title,creator,status',
+			 '@group': 'status',
+			 '@filter': 'categories,status,assignedto',
+			 '@columns': 'id,activity,creator,title,status',
 			 '@search_text': '',
-			 'status': status_notresolved,
+			 'status': '-1,1,2,3,4,5,7,9',
 			 'assignedto': request.user.id,
+			 'categories': cat,
 			 '@dispname': i18n.gettext('Your Issues'),
 			 })"
 		   i18n:translate="">Your Issues</a><br>

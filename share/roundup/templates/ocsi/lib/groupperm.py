@@ -235,6 +235,14 @@ def getCategory(request):
             client.add_error_message(
                 "Unknown category %r; using the default instead." % catid)
             catid = None
+        elif catid not in user_category_ids(db, client.userid):
+            # Not a security boundary -- the permission checks above deny
+            # the issues regardless -- but showing a category the user has
+            # no access to would just yield an unexplained empty list.
+            client.add_error_message(
+                "You do not have access to category %r; using the default "
+                "instead." % db.category.get(catid, 'name'))
+            catid = None
 
     if catid is None:
         catid = default_category(db)
