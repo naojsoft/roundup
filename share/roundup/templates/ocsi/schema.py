@@ -137,14 +137,15 @@ issue = IssueClass(db, "issue",
 # about security setup.
 
 # Roles are held as records so that they can be administered from the
-# web interface; register each with the security system.  During
-# "roundup-admin initialise" schema.py runs before the tables exist, so a
-# failure to read them here is expected and not fatal; the static list
-# below is enough to get the tracker created.
-try:
+# web interface; register each with the security system.
+# Only read the table when the database says it exists. During
+# "roundup-admin initialise" schema.py runs before the tables are
+# created, and on PostgreSQL a failed query aborts the entire
+# transaction, taking the rest of the table creation down with it --
+# catching the Python exception is not enough.
+_roles = []
+if 'role' in (getattr(db, 'database_schema', None) or {}).get('tables', {}):
     _roles = [db.getnode('role', roleid) for roleid in db.role.list()]
-except Exception:
-    _roles = []
 for _node in _roles:
     db.security.addRole(name=_node['name'], description=_node['description'])
 
