@@ -18,107 +18,38 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
+# This is the classic template's statusauditor adapted to the OCSI
+# schema.
+#
+# The stock version defaulted a new issue to the status "unread" and
+# moved quiescent issues to "chatting" when a message arrived. Neither
+# status exists here -- OCSI uses new, open, in-progress, testing, ready,
+# watching, closed and deferred -- so both lookups raised KeyError and
+# both handlers returned silently. The effect was that issues created
+# without an explicit status kept no status at all.
+#
+# The "chatting" auto-transition is deliberately not reimplemented: it
+# has never fired on this tracker, and giving it an OCSI equivalent would
+# start silently changing the status of any issue that receives a
+# message. That is a policy decision, not a port.
 
-from roundup.configuration import BooleanOption, InvalidOptionError
+DEFAULT_STATUS = 'new'
 
-def chatty(db, cl, nodeid, newvalues):
-    ''' If the issue is currently 'resolved', 'done-cbb' or None,
-        then set it to 'chatting'. If issue is 'unread' and
-        chatting_requires_two_users is true, set state
-        to 'chatting' if the person adding the new message is not
-        the same as the person who created the issue. This allows
-        somebody to submit multiple emails describing the problem
-        without changing it to 'chatting'. 'chatting' should
-        indicate at least two people are 'chatting'.
-    '''
-    # If set to true, change state from 'unread' to 'chatting' only
-    # if the author of the update is not the person who created the
-    # first message (and thus the issue). If false (default ini file
-    # setting) set 'chatting' when the second message is received.
-    try:
-        chatting_requires_two_users = BooleanOption(None,
-                        "detector::Statusauditor",
-                        "CHATTING_REQUIRES_TWO_USERS").str2value(
-        db.config.detectors[
-        'STATUSAUDITOR_CHATTING_REQUIRES_TWO_USERS' ]
-    )
-    except InvalidOptionError:
-        chatting_requires_two_users = False
-        # NOTE if this is hit, detectors/config.ini needs to be updated with:
-        #   [statusauditor]
-        #   chatting_requires_two_users = yes
-        # to enable or no to disable (same as default)
-        
-    # don't fire if there's no new message (ie. chat)
-    if 'messages' not in newvalues:
-        return
-    if newvalues['messages'] == cl.get(nodeid, 'messages'):
+
+def preset_status(db, cl, nodeid, newvalues):
+    """Give a new issue a status when none was supplied."""
+    if newvalues.get('status'):
         return
 
-    # get the chatting state ID
     try:
-        chatting_id = db.status.lookup('chatting')
+        newvalues['status'] = db.status.lookup(DEFAULT_STATUS)
     except KeyError:
-        # no chatting state, ignore all this stuff
+        # The status does not exist; leave the issue alone rather than
+        # failing the create.
         return
-
-    # get the current value
-    current_status = cl.get(nodeid, 'status')
-
-    # see if there's an explicit change in this transaction
-    if 'status' in newvalues:
-        # yep, skip
-        return
-
-    # determine the id of 'unread', 'resolved' and 'chatting'
-    fromstates = []
-    for state in 'unread resolved done-cbb'.split():
-        try:
-            fromstates.append(db.status.lookup(state))
-        except KeyError:
-            pass
-
-    unread = fromstates[0] # grab the 'unread' state which is first
-
-    # ok, there's no explicit change, so check if we are in a state that
-    # should be changed. First see if we should set 'chatting' based on
-    # who opened the issue.
-    if current_status == unread and chatting_requires_two_users:
-        # find creator of issue and compare to currentuser making
-        # update. If the creator is same as initial author don't
-        # change to 'chatting'.
-        issue_creator = cl.get(nodeid, 'creator')
-        if issue_creator == db.getuid():
-            # person is chatting with themselves, don't set 'chatting'
-            return
-
-    # Current author is not the initiator of the issue so
-    # we are 'chatting'.
-    if current_status in fromstates + [None]:
-        # yep, we're now chatting
-        newvalues['status'] = chatting_id
-
-
-def presetunread(db, cl, nodeid, newvalues):
-    ''' Make sure the status is set on new issues
-    '''
-    if 'status' in newvalues and newvalues['status']:
-        return
-
-    # get the unread state ID
-    try:
-        unread_id = db.status.lookup('unread')
-    except KeyError:
-        # no unread state, ignore all this stuff
-        return
-
-    # ok, do it
-    newvalues['status'] = unread_id
 
 
 def init(db):
-    # fire before changes are made
-    db.issue.audit('set', chatty)
-    db.issue.audit('create', presetunread)
+    db.issue.audit('create', preset_status)
 
 # vim: set filetype=python ts=4 sw=4 et si
