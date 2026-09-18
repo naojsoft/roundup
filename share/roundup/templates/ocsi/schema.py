@@ -1,3 +1,4 @@
+import groupperm as gpm
 
 #
 # TRACKER SCHEMA
@@ -9,11 +10,13 @@
 #   creator = Link('user')
 #   actor = Link('user')
 
-# Priorities
-pri = Class(db, "priority",
-                name=String(),
-                order=Number())
-pri.setkey("name")
+rank = Class(db, "rank",
+                name=String(), order=Number())
+rank.setkey("name")
+
+importance = Class(db, "importance",
+                name=String(), order=Number())
+importance.setkey("name")
 
 # Statuses
 stat = Class(db, "status",
@@ -21,10 +24,25 @@ stat = Class(db, "status",
                 order=Number())
 stat.setkey("name")
 
-# Keywords
+res = Class(db, "resolution",
+                name=String(), order=Number())
+res.setkey("name")
+
+site = Class(db, "site",
+                name=String(), order=Number())
+site.setkey("name")
+
 keyword = Class(db, "keyword",
-                name=String())
+                name=String(), categories=Multilink("category"),
+                description=String())
 keyword.setkey("name")
+
+# Issues are partitioned into categories; see lib/groupperm.py.
+category = Class(db, "category",
+                 name=String(),
+                 description=String(),
+                 order=Number())
+category.setkey("name")
 
 # User-defined saved searches
 query = Class(db, "query",
@@ -33,7 +51,38 @@ query = Class(db, "query",
                 url=String(),
                 private_for=Link('user'))
 
-# add any additional database schema configuration here
+role = Class(db, "role",
+             name=String(),
+             description=String(),
+             order=Number())
+role.setkey("name")
+
+catrole = Class(db, "catrole",
+                catid=Link("category"),
+                roleid=Link("role"))
+
+group = Class(db, "group",
+              name=String(),
+              description=String(),
+              members=Multilink("user"),
+              order=Number())
+group.setkey("name")
+
+# A named set of issue properties that may be viewed and/or edited.
+permbundle = Class(db, "permbundle",
+                   name=String(),
+                   klass=String(),
+                   klassperms=String(),
+                   viewprops=String(),
+                   editprops=String())
+permbundle.setkey("name")
+
+# Grants a group one permission bundle within one category.
+groupperm = Class(db, "groupperm",
+                  grpid=Link("group"),
+                  catid=Link("category"),
+                  permid=Link("permbundle"),
+                  comment=String())
 
 user = Class(db, "user",
                 username=String(),
@@ -72,10 +121,14 @@ file = FileClass(db, "file",
 #   nosy = Multilink("user")
 #   superseder = Multilink("issue")
 issue = IssueClass(db, "issue",
-                assignedto=Link("user"),
-                keyword=Multilink("keyword"),
-                priority=Link("priority"),
-                status=Link("status"))
+                   assignedto=Multilink("user"),
+                   categories=Multilink("category"),
+                   keywords=Multilink("keyword"),
+                   rank=Link("rank"),
+                   status=Link("status"),
+                   importance=Link("importance"),
+                   site=Multilink("site"),
+                   resolved=Link("resolution"))
 
 #
 # TRACKER SECURITY SETTINGS
@@ -83,23 +136,55 @@ issue = IssueClass(db, "issue",
 # See the configuration and customisation document for information
 # about security setup.
 
+# Roles are held as records so that they can be administered from the
+# web interface; register each with the security system.  During
+# "roundup-admin initialise" schema.py runs before the tables exist, so a
+# failure to read them here is expected and not fatal; the static list
+# below is enough to get the tracker created.
+try:
+    _roles = [db.getnode('role', roleid) for roleid in db.role.list()]
+except Exception:
+    _roles = []
+for _node in _roles:
+    db.security.addRole(name=_node['name'], description=_node['description'])
+
+# The roles this schema grants permissions to must exist even when the
+# role class has not been populated yet -- during "roundup-admin
+# initialise", schema.py runs before initial_data.py.  Role names are
+# held lowercased by the security system.
+for _name, _description in (
+        ('Uber', 'May administer groups, categories and permissions'),
+        ('Lurker', 'May read issues but not change them'),
+):
+    if _name.lower() not in db.security.role:
+        db.security.addRole(name=_name, description=_description)
+
 #
 # REGULAR USERS
 #
 # Give the regular users access to the web and email interface
 db.security.addPermissionToRole('User', 'Web Access')
 db.security.addPermissionToRole('User', 'Email Access')
-db.security.addPermissionToRole('User', 'Rest Access')
-db.security.addPermissionToRole('User', 'Xmlrpc Access')
+db.security.addPermissionToRole('Uber', 'Web Roles')
 
-# Assign the access and edit Permissions for issue, file and message
-# to regular users now
-for cl in 'issue', 'file', 'msg', 'keyword':
+for cl in ['query']:
     db.security.addPermissionToRole('User', 'View', cl)
     db.security.addPermissionToRole('User', 'Edit', cl)
     db.security.addPermissionToRole('User', 'Create', cl)
-for cl in 'priority', 'status':
+for cl in ['file', 'msg']:
     db.security.addPermissionToRole('User', 'View', cl)
+    db.security.addPermissionToRole('User', 'Edit', cl)
+    db.security.addPermissionToRole('User', 'Create', cl)
+# Issue access is not granted here; it is derived from the issue's
+# categories farther below.
+for cl in ['status', 'resolution', 'importance', 'site', 'rank']:
+    db.security.addPermissionToRole('User', 'View', cl)
+for cl in ['keyword']:
+    db.security.addPermissionToRole('User', 'View', cl)
+for cl in ['group', 'permbundle', 'groupperm', 'category', 'keyword', 'user']:
+    db.security.addPermissionToRole('Uber', 'View', cl)
+    db.security.addPermissionToRole('Uber', 'Edit', cl)
+    db.security.addPermissionToRole('Uber', 'Create', cl)
 
 # May users view other user information? Comment these lines out
 # if you don't want them to
@@ -121,42 +206,88 @@ p = db.security.addPermission(name='View', klass='user', check=own_record,
 db.security.addPermissionToRole('User', p)
 p = db.security.addPermission(name='Edit', klass='user', check=own_record,
     properties=('username', 'password', 'address', 'realname', 'phone',
-        'organisation', 'alternate_addresses', 'queries', 'timezone'),
+                'organisation', 'alternate_addresses', 'queries', 'timezone'),
     description="User is allowed to edit their own user details")
 db.security.addPermissionToRole('User', p)
 
-
 # Users should be able to edit and view their own queries. They should also
-# be able to view any marked as not private. They should not be able to
-# edit others' queries, even if they're not private
-def view_query(db, userid, itemid):
-    private_for = db.query.get(itemid, 'private_for')
-    if not private_for: return True
-    return userid == private_for
-
-
+# be able to retire them.
 def edit_query(db, userid, itemid):
+    '''Determine whether the userid matches the item being accessed.'''
     return userid == db.query.get(itemid, 'creator')
 
 
-p = db.security.addPermission(name='View', klass='query', check=view_query,
-    description="User is allowed to view their own and public queries")
-db.security.addPermissionToRole('User', p)
-p = db.security.addPermission(name='Search', klass='query')
+p = db.security.addPermission(name='View', klass='query', check=edit_query,
+    description="User is allowed to view their own queries")
 db.security.addPermissionToRole('User', p)
 p = db.security.addPermission(name='Edit', klass='query', check=edit_query,
-    description="User is allowed to edit their queries")
+    description="User is allowed to edit their own queries")
 db.security.addPermissionToRole('User', p)
 p = db.security.addPermission(name='Retire', klass='query', check=edit_query,
-    description="User is allowed to retire their queries")
-db.security.addPermissionToRole('User', p)
-p = db.security.addPermission(name='Restore', klass='query', check=edit_query,
-    description="User is allowed to restore their queries")
+    description="User is allowed to retire their own queries")
 db.security.addPermissionToRole('User', p)
 p = db.security.addPermission(name='Create', klass='query',
     description="User is allowed to create queries")
 db.security.addPermissionToRole('User', p)
 
+
+####### ISSUE VIEW/EDIT/CREATE PERMISSIONS #######
+#
+# Every issue property gets a permission whose check consults the user's
+# group memberships in the issue's categories (see lib/groupperm.py).
+#
+# Each check is paired with an equivalent filter.  Roundup uses the filter
+# to express the same restriction as a database query, so that listing and
+# searching issues does not have to run the Python check over every issue
+# in the tracker.  The two must always be kept in step.
+for propname in db.issue.getprops():
+
+    perm = db.security.addPermission(name='View', klass='issue',
+         properties=[propname],
+         check=gpm.make_check(propname, gpm.VIEW),
+         filter=gpm.make_filter(propname, gpm.VIEW),
+         description='User may view this issue property in categories '
+                     'their groups give them view access to')
+    db.security.addPermissionToRole('User', perm)
+
+    perm = db.security.addPermission(name='Edit', klass='issue',
+         properties=[propname],
+         check=gpm.make_check(propname, gpm.EDIT),
+         filter=gpm.make_filter(propname, gpm.EDIT),
+         description='User may edit this issue property in categories '
+                     'their groups give them edit access to')
+    db.security.addPermissionToRole('User', perm)
+
+    # permbundle has no separate "creatable" property set; Create has
+    # always been granted on the strength of the edit set.
+    perm = db.security.addPermission(name='Create', klass='issue',
+         properties=[propname],
+         check=gpm.make_check(propname, gpm.EDIT),
+         filter=gpm.make_filter(propname, gpm.EDIT),
+         description='User may set this issue property when creating an '
+                     'issue in categories their groups give them edit '
+                     'access to')
+    db.security.addPermissionToRole('User', perm)
+
+    # Search permissions carry no check: a permission with a check is not
+    # searchable, and Roundup *silently drops* search and sort criteria on
+    # properties a user cannot search, which would give wrong results
+    # rather than an error.  Which issues come back is still governed by
+    # the View permissions above, so this does not widen what a user can
+    # read.  Roundup 1.4.11 had no search-permission concept at all, so
+    # granting these preserves the tracker's existing behaviour.
+    perm = db.security.addPermission(name='Search', klass='issue',
+         properties=[propname],
+         description='User may search and sort on this issue property')
+    db.security.addPermissionToRole('User', perm)
+
+# Filtering issues by category requires the category class to be
+# searchable on the properties Roundup uses to resolve a link: the id,
+# the key property and the order property.
+perm = db.security.addPermission(name='Search', klass='category',
+    properties=('id', 'name', 'order'),
+    description='User may filter and sort issues by category')
+db.security.addPermissionToRole('User', perm)
 
 #
 # ANONYMOUS USER PERMISSIONS
@@ -168,7 +299,7 @@ db.security.addPermissionToRole('Anonymous', 'Web Access')
 
 # Let anonymous users access the email interface (note that this implies
 # that they will be registered automatically, hence they will need the
-# "Register" user Permission below)
+# "Create" user Permission below)
 # This is disabled by default to stop spam from auto-registering users on
 # public trackers.
 #db.security.addPermissionToRole('Anonymous', 'Email Access')
@@ -179,24 +310,16 @@ db.security.addPermissionToRole('Anonymous', 'Web Access')
 db.security.addPermissionToRole('Anonymous', 'Register', 'user')
 
 # Allow anonymous users access to view issues (and the related, linked
-# information)
-for cl in 'issue', 'file', 'msg', 'keyword', 'priority', 'status':
-    db.security.addPermissionToRole('Anonymous', 'View', cl)
-
-# Allow the anonymous user to use the "Show Unassigned" search.
-# It acts like "Show Open" if this permission is not available.
-# If you are running a tracker that does not allow read access for
-# anonymous, you should remove this entry as it can be used to perform
-# a username guessing attack against a roundup install.
-p = db.security.addPermission(name='Search', klass='user')
-db.security.addPermissionToRole('Anonymous', p)
+# information).
+#for cl in 'issue', 'file', 'msg', 'keyword', 'priority', 'status':
+#    db.security.addPermissionToRole('Anonymous', 'View', cl)
 
 # [OPTIONAL]
-# Allow anonymous users access to create or edit "issue" items (and the
-# related file and message items)
-#for cl in 'issue', 'file', 'msg':
-#   db.security.addPermissionToRole('Anonymous', 'Create', cl)
-#   db.security.addPermissionToRole('Anonymous', 'Edit', cl)
+# Allow anonymous users access to edit the "issue" class of data
+# Note: this also grants access to create related information like
+#       files and messages etc that are linked to issues
+#db.security.addPermissionToRole('Anonymous', 'Edit', 'issue')
+#db.security.addPermissionToRole('Anonymous', 'Create', 'issue')
 
 
 # vim: set filetype=python sts=4 sw=4 et si :
