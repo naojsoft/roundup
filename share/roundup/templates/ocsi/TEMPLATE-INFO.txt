@@ -1,0 +1,8 @@
+Name: ocsi
+Description: Subaru Telescope OCS issue tracker (OCSI). Extends the classic
+             template with a category/group permission model: issues are
+             partitioned into categories, and a user's visibility and edit
+             rights on individual issue properties are derived from their
+             group memberships via permission bundles. Also adds rank,
+             importance, resolution and site classifications.
+Intended-For: Subaru Telescope SSD
